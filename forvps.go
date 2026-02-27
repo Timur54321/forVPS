@@ -41,6 +41,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p/core/crypto"
@@ -52,13 +53,67 @@ import (
 	"github.com/multiformats/go-multiaddr"
 )
 
+var (
+	stream1 network.Stream
+	stream2 network.Stream
+	mu      sync.Mutex
+)
+
 func handleStream(s network.Stream) {
-	log.Println("Got a new stream!")
+	log.Println("Got a new stream from:", s.Conn().RemotePeer())
 
-	go readData(s)
-	go writeData(s)
+	mu.Lock()
+	defer mu.Unlock()
 
-	// stream 's' will stay open until you close it (or the other side closes it).
+	if stream1 == nil {
+		stream1 = s
+		log.Println("Stream1 registered")
+		return
+	}
+
+	if stream2 == nil {
+		stream2 = s
+		log.Println("Stream2 registered")
+
+		// когда оба подключены — запускаем туннель
+		go bridgeStreams(stream1, stream2)
+		return
+	}
+
+	// если вдруг пришёл третий — закрываем
+	log.Println("Already have 2 streams, closing extra")
+	s.Close()
+}
+
+func bridgeStreams(a, b network.Stream) {
+	log.Println("Starting bidirectional bridge")
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	// A → B
+	go func() {
+		defer wg.Done()
+		io.Copy(b, a)
+	}()
+
+	// B → A
+	go func() {
+		defer wg.Done()
+		io.Copy(a, b)
+	}()
+
+	wg.Wait()
+
+	log.Println("Bridge finished, closing streams")
+
+	a.Close()
+	b.Close()
+
+	mu.Lock()
+	stream1 = nil
+	stream2 = nil
+	mu.Unlock()
 }
 
 func readData(s network.Stream) {
