@@ -25,12 +25,35 @@
  * This program demonstrate a simple chat application using p2p communication.
  *
  */
+
+/*
+stream1 (/shareFile/1.0.0)
+stream1 (/sendFile/1.0.0)
+
+writes to sendFile filename
+
+ON NODE1 (
+filesChannel
+
+	func readForSendingFiles(s) {
+		filesChannel <- s.fileName
+	}
+
+	func sendFile(s) {
+		for fileName := range filesChannel {
+			writing data to stream...
+		}
+	}
+
+)
+*/
 package main
 
 import (
 	"bufio"
 	"context"
 	"crypto/rand"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
@@ -58,6 +81,31 @@ var (
 	stream2 network.Stream
 	mu      sync.Mutex
 )
+
+type RegisteredFile struct {
+	ID            string `json:"fileID"`
+	Name          string `json:"filename"`
+	Size          int64  `json:"size"`
+	SizeFormatted string `json:"size_formatted"`
+}
+
+const RegisterFileProtocolID = "/register_file/1.0.0"
+
+func registerFileSH(s network.Stream) {
+	defer s.Close()
+
+	var received RegisteredFile
+	decoder := json.NewDecoder(s)
+
+	err := decoder.Decode(&received)
+	if err != nil {
+		log.Printf("Error decoding file: %v", err)
+		return
+	}
+
+	fmt.Printf("Received struct: %+v\n", received)
+	s.Write([]byte("OK"))
+}
 
 func handleStream(s network.Stream) {
 	log.Println("Got a new stream from:", s.Conn().RemotePeer())
@@ -346,6 +394,7 @@ func startPeer(_ context.Context, h host.Host, streamHandler network.StreamHandl
 	// This function is called when a peer connects, and starts a stream with this protocol.
 	// Only applies on the receiving side.
 	h.SetStreamHandler("/chat/1.0.0", streamHandler)
+	h.SetStreamHandler(RegisterFileProtocolID, registerFileSH)
 	fmt.Println(h.Network())
 
 	// Let's get the actual TCP port from our listen multiaddr, in case we're using 0 (default; random available port).
