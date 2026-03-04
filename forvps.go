@@ -89,10 +89,37 @@ type RegisteredFile struct {
 	SizeFormatted string `json:"size_formatted"`
 }
 
+type RegisteredPeerForTransmition struct {
+	pid peer.ID
+	str network.Stream
+}
+
 var registeredFiles []RegisteredFile
+var registeredPeersForTransmition []RegisteredPeerForTransmition
 
 const RegisterFileProtocolID = "/register_file/1.0.0"
 const FilesForSaleProtocolID = "/files_for_sale/1.0.0"
+const FileWaitSignal = "/waitForSignalToTransmitFile/1.0.0"
+const BuyFileProtocolID = "/buyFile/1.0.0"
+const transmitProtocolID = "/transmitFile/1.0.0"
+
+func buyFileSH(s network.Stream) {
+	defer s.Close()
+
+	encoder := json.NewEncoder(s)
+	err := encoder.Encode(registeredFiles[0].ID)
+	if err != nil {
+		log.Println(err)
+	}
+}
+
+func registerPeerForTransmition(s network.Stream) {
+	defer s.Close()
+	registeredPeersForTransmition = append(registeredPeersForTransmition, RegisteredPeerForTransmition{
+		pid: s.Conn().RemotePeer(),
+		str: s,
+	})
+}
 
 func sendFilesForSale(s network.Stream) {
 	defer s.Close()
@@ -409,10 +436,11 @@ func startPeer(_ context.Context, h host.Host, streamHandler network.StreamHandl
 	// Set a function as stream handler.
 	// This function is called when a peer connects, and starts a stream with this protocol.
 	// Only applies on the receiving side.
-	h.SetStreamHandler("/chat/1.0.0", streamHandler)
+	h.SetStreamHandler(transmitProtocolID, streamHandler)
 	h.SetStreamHandler(RegisterFileProtocolID, registerFileSH)
 	h.SetStreamHandler(FilesForSaleProtocolID, sendFilesForSale)
-	fmt.Println(h.Network())
+	h.SetStreamHandler(FileWaitSignal, registerPeerForTransmition)
+	h.SetStreamHandler(BuyFileProtocolID, buyFileSH)
 
 	// Let's get the actual TCP port from our listen multiaddr, in case we're using 0 (default; random available port).
 	var port string
