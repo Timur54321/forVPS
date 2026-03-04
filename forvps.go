@@ -106,7 +106,7 @@ const transmitProtocolID = "/transmitFile/1.0.0"
 func buyFileSH(s network.Stream) {
 	defer s.Close()
 
-	encoder := json.NewEncoder(s)
+	encoder := json.NewEncoder(registeredPeersForTransmition[0].str)
 	err := encoder.Encode(registeredFiles[0].ID)
 	if err != nil {
 		log.Println(err)
