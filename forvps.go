@@ -89,7 +89,22 @@ type RegisteredFile struct {
 	SizeFormatted string `json:"size_formatted"`
 }
 
+var registeredFiles []RegisteredFile
+
 const RegisterFileProtocolID = "/register_file/1.0.0"
+const FilesForSaleProtocolID = "/files_for_sale/1.0.0"
+
+func sendFilesForSale(s network.Stream) {
+	defer s.Close()
+
+	encoder := json.NewEncoder(s)
+	err := encoder.Encode(registeredFiles)
+	if err != nil {
+		log.Println(err)
+	}
+
+	fmt.Println("Files for sales successfully sent")
+}
 
 func registerFileSH(s network.Stream) {
 	defer s.Close()
@@ -105,6 +120,7 @@ func registerFileSH(s network.Stream) {
 
 	fmt.Printf("Received struct: %+v\n", received)
 	s.Write([]byte("OK"))
+	registeredFiles = append(registeredFiles, received)
 }
 
 func handleStream(s network.Stream) {
@@ -395,6 +411,7 @@ func startPeer(_ context.Context, h host.Host, streamHandler network.StreamHandl
 	// Only applies on the receiving side.
 	h.SetStreamHandler("/chat/1.0.0", streamHandler)
 	h.SetStreamHandler(RegisterFileProtocolID, registerFileSH)
+	h.SetStreamHandler(FilesForSaleProtocolID, sendFilesForSale)
 	fmt.Println(h.Network())
 
 	// Let's get the actual TCP port from our listen multiaddr, in case we're using 0 (default; random available port).
