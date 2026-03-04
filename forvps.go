@@ -114,7 +114,6 @@ func buyFileSH(s network.Stream) {
 }
 
 func registerPeerForTransmition(s network.Stream) {
-	defer s.Close()
 	registeredPeersForTransmition = append(registeredPeersForTransmition, RegisteredPeerForTransmition{
 		pid: s.Conn().RemotePeer(),
 		str: s,
